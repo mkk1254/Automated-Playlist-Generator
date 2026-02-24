@@ -1,0 +1,21 @@
+﻿# Secrets
+.env
+.env.*
+!.env.example
+
+# Local helper scripts with secrets
+get_refresh_token.py
+
+# Python caches/artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local runtime/cache files
+.cache
