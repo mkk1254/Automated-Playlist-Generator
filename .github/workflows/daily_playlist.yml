@@ -2,7 +2,7 @@
 
 on:
   schedule:
-    - cron: '5 10 * * *'
+    - cron: '30 0 * * *'
   workflow_dispatch:
 
 jobs:
@@ -29,6 +29,6 @@ jobs:
           SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
           SPOTIFY_REDIRECT_URI: ${{ secrets.SPOTIFY_REDIRECT_URI }}
           MISSION_URL: https://bcd-api.fly.dev/api/missions/daily-mission
-          PLAYLIST_TIMEZONE: America/New_York
+          PLAYLIST_TIMEZONE: Asia/Kolkata
           BCD_BEARER_TOKEN: ${{ secrets.BCD_BEARER_TOKEN }}
         run: python -m src.app --diagnostics

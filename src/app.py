@@ -1,10 +1,11 @@
 ﻿from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .config import load_artist_allowlist, load_settings
@@ -32,6 +33,26 @@ def playlist_name_for_today(timezone_name: str) -> str:
     return f"Daily Mission {current_date.isoformat()}"
 
 
+def playlist_name_for_yesterday(timezone_name: str) -> str:
+    current_date = datetime.now(ZoneInfo(timezone_name)).date()
+    return f"Daily Mission {(current_date - timedelta(days=1)).isoformat()}"
+
+
+def mission_signature(missions: list) -> str:
+    canonical = sorted((mission.song_title, mission.stream_count) for mission in missions)
+    payload = json.dumps(canonical, ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _signature_from_description(description: str) -> str | None:
+    marker = "mission_sig:"
+    start = description.find(marker)
+    if start == -1:
+        return None
+    token = description[start + len(marker) :].split()[0].strip()
+    return token or None
+
+
 def main() -> int:
     args = build_parser().parse_args()
 
@@ -41,6 +62,7 @@ def main() -> int:
 
     mission_client = MissionClient(base_url=mission_url)
     missions = mission_client.fetch_missions()
+    current_signature = mission_signature(missions)
 
     generation_result = generate_playlist_with_diagnostics(
         missions=missions,
@@ -71,11 +93,23 @@ def main() -> int:
 
     user_id = spotify.get_current_user_id()
     playlist_name = playlist_name_for_today(settings.timezone_name)
-    playlist_id = spotify.find_playlist_id_by_name(user_id=user_id, name=playlist_name)
+    yesterday_playlist_name = playlist_name_for_yesterday(settings.timezone_name)
+    yesterday_playlist = spotify.find_playlist_by_name(user_id=user_id, name=yesterday_playlist_name)
+    yesterday_signature = _signature_from_description(yesterday_playlist["description"]) if yesterday_playlist else None
+    same_as_yesterday = yesterday_signature == current_signature
 
-    description = "Auto-generated daily mission playlist"
-    if playlist_id is None:
-        playlist_id = spotify.create_playlist(user_id=user_id, name=playlist_name, description=description, public=False)
+    playlist_id: str | None = None
+    playlist_reused = False
+    description = f"Auto-generated daily mission playlist mission_sig:{current_signature}"
+
+    if same_as_yesterday and yesterday_playlist is not None:
+        playlist_id = yesterday_playlist["id"]
+        playlist_name = yesterday_playlist_name
+        playlist_reused = True
+    else:
+        playlist_id = spotify.find_playlist_id_by_name(user_id=user_id, name=playlist_name)
+        if playlist_id is None:
+            playlist_id = spotify.create_playlist(user_id=user_id, name=playlist_name, description=description, public=False)
 
     spotify.replace_playlist_tracks(playlist_id, ordered_uris)
 
@@ -87,6 +121,9 @@ def main() -> int:
         "total_planned_plays": len(planned_titles),
         "total_uploaded_tracks": len(ordered_uris),
         "unmatched_titles": sorted(unmatched),
+        "mission_signature": current_signature,
+        "same_as_yesterday": same_as_yesterday,
+        "playlist_reused": playlist_reused,
         "strict_no_adjacent_feasible": is_no_adjacent_feasible(missions),
         "min_fillers_requested": args.min_fillers,
         "min_fillers_feasible": is_min_filler_feasible(missions, args.min_fillers),

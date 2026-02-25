@@ -146,6 +146,12 @@ class SpotifyClient:
         return uri if isinstance(uri, str) and uri else None
 
     def find_playlist_id_by_name(self, user_id: str, name: str) -> str | None:
+        playlist = self.find_playlist_by_name(user_id=user_id, name=name)
+        if playlist is None:
+            return None
+        return playlist["id"]
+
+    def find_playlist_by_name(self, user_id: str, name: str) -> dict[str, str] | None:
         offset = 0
         while True:
             response = self._api_request(
@@ -164,7 +170,10 @@ class SpotifyClient:
                 if item.get("name") == name and isinstance(item.get("id"), str):
                     owner = item.get("owner", {})
                     if isinstance(owner, dict) and owner.get("id") == user_id:
-                        return item["id"]
+                        return {
+                            "id": item["id"],
+                            "description": item.get("description") if isinstance(item.get("description"), str) else "",
+                        }
 
             if not payload.get("next"):
                 return None
