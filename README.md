@@ -5,7 +5,7 @@ Automates your daily mission pipeline:
 1. Fetches mission songs from `https://bcd-api.fly.dev/api/missions/daily-mission`
 2. Generates a natural playlist order with mission counts
 3. Resolves tracks on Spotify (title + optional artist allowlist)
-4. Creates or updates a private playlist named `Daily Mission YYYY-MM-DD`
+4. Creates or updates a public playlist named `Daily Mission YYYY-MM-DD`
 5. Reuses yesterday's playlist when today's mission payload is unchanged
 
 ## Setup

@@ -109,7 +109,9 @@ def main() -> int:
     else:
         playlist_id = spotify.find_playlist_id_by_name(user_id=user_id, name=playlist_name)
         if playlist_id is None:
-            playlist_id = spotify.create_playlist(user_id=user_id, name=playlist_name, description=description, public=False)
+            playlist_id = spotify.create_playlist(user_id=user_id, name=playlist_name, description=description, public=True)
+        else:
+            spotify.update_playlist_description(playlist_id=playlist_id, description=description)
 
     spotify.replace_playlist_tracks(playlist_id, ordered_uris)
 
