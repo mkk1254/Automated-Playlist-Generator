@@ -195,6 +195,13 @@ class SpotifyClient:
             raise SpotifyClientError("Spotify create playlist response missing playlist id")
         return playlist_id
 
+    def update_playlist_description(self, playlist_id: str, description: str) -> None:
+        self._api_request(
+            "PUT",
+            f"/v1/playlists/{playlist_id}",
+            json={"description": description},
+        )
+
     def replace_playlist_tracks(self, playlist_id: str, uris: list[str]) -> None:
         first_chunk = uris[:100]
         self._api_request("PUT", f"/v1/playlists/{playlist_id}/tracks", json={"uris": first_chunk})
