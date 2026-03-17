@@ -5,6 +5,7 @@
 
 # Local helper scripts with secrets
 get_refresh_token.py
+check.py
 
 # Python caches/artifacts
 __pycache__/

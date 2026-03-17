@@ -5,13 +5,14 @@ import hashlib
 import json
 import sys
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from .config import load_artist_allowlist, load_settings
 from .generator import generate_playlist_with_diagnostics, is_min_filler_feasible, is_no_adjacent_feasible
 from .mission_client import MissionClient
-from .spotify_client import SpotifyClient
+from .spotify_client import SpotifyClient, SpotifyClientError
+from .state import DEFAULT_STATE_PATH, PlaylistState, load_playlist_state, save_playlist_state
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,24 +34,34 @@ def playlist_name_for_today(timezone_name: str) -> str:
     return f"Daily Mission {current_date.isoformat()}"
 
 
-def playlist_name_for_yesterday(timezone_name: str) -> str:
-    current_date = datetime.now(ZoneInfo(timezone_name)).date()
-    return f"Daily Mission {(current_date - timedelta(days=1)).isoformat()}"
-
-
 def mission_signature(missions: list) -> str:
     canonical = sorted((mission.song_title, mission.stream_count) for mission in missions)
     payload = json.dumps(canonical, ensure_ascii=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def _signature_from_description(description: str) -> str | None:
-    marker = "mission_sig:"
-    start = description.find(marker)
-    if start == -1:
+def playlist_description() -> str:
+    return "Auto-generated daily mission playlist"
+
+
+def _playlist_state_for_run(signature: str, playlist_id: str, playlist_name: str) -> PlaylistState:
+    playlist_date = playlist_name.removeprefix("Daily Mission ").strip() or playlist_name
+    return PlaylistState(
+        last_mission_signature=signature,
+        playlist_id=playlist_id,
+        playlist_name=playlist_name,
+        playlist_date=playlist_date,
+    )
+
+
+def _resolve_saved_playlist(spotify: SpotifyClient, state: PlaylistState | None) -> dict[str, str] | None:
+    if state is None:
         return None
-    token = description[start + len(marker) :].split()[0].strip()
-    return token or None
+
+    try:
+        return spotify.get_playlist(state.playlist_id)
+    except SpotifyClientError:
+        return None
 
 
 def main() -> int:
@@ -93,27 +104,41 @@ def main() -> int:
 
     user_id = spotify.get_current_user_id()
     playlist_name = playlist_name_for_today(settings.timezone_name)
-    yesterday_playlist_name = playlist_name_for_yesterday(settings.timezone_name)
-    yesterday_playlist = spotify.find_playlist_by_name(user_id=user_id, name=yesterday_playlist_name)
-    yesterday_signature = _signature_from_description(yesterday_playlist["description"]) if yesterday_playlist else None
-    same_as_yesterday = yesterday_signature == current_signature
+    saved_state = load_playlist_state(DEFAULT_STATE_PATH)
+    saved_playlist = _resolve_saved_playlist(spotify, saved_state)
+    mission_unchanged = (
+        saved_state is not None
+        and saved_playlist is not None
+        and saved_state.last_mission_signature == current_signature
+    )
 
     playlist_id: str | None = None
     playlist_reused = False
-    description = f"Auto-generated daily mission playlist mission_sig:{current_signature}"
+    description = playlist_description()
 
-    if same_as_yesterday and yesterday_playlist is not None:
-        playlist_id = yesterday_playlist["id"]
-        playlist_name = yesterday_playlist_name
+    if mission_unchanged and saved_state is not None and saved_playlist is not None:
+        playlist_id = saved_playlist["id"]
+        playlist_name = saved_playlist["name"] or saved_state.playlist_name
         playlist_reused = True
+        spotify.update_playlist_description(playlist_id=playlist_id, description=description)
     else:
-        playlist_id = spotify.find_playlist_id_by_name(user_id=user_id, name=playlist_name)
-        if playlist_id is None:
+        today_playlist = spotify.find_playlist_by_name(user_id=user_id, name=playlist_name)
+        if today_playlist is None:
             playlist_id = spotify.create_playlist(user_id=user_id, name=playlist_name, description=description, public=True)
         else:
+            playlist_id = today_playlist["id"]
+            playlist_name = today_playlist["name"] or playlist_name
             spotify.update_playlist_description(playlist_id=playlist_id, description=description)
 
     spotify.replace_playlist_tracks(playlist_id, ordered_uris)
+    save_playlist_state(
+        _playlist_state_for_run(
+            signature=current_signature,
+            playlist_id=playlist_id,
+            playlist_name=playlist_name,
+        ),
+        DEFAULT_STATE_PATH,
+    )
 
     print(json.dumps(planned_titles, ensure_ascii=False))
 
@@ -124,7 +149,8 @@ def main() -> int:
         "total_uploaded_tracks": len(ordered_uris),
         "unmatched_titles": sorted(unmatched),
         "mission_signature": current_signature,
-        "same_as_yesterday": same_as_yesterday,
+        "mission_unchanged": mission_unchanged,
+        "same_as_yesterday": mission_unchanged,
         "playlist_reused": playlist_reused,
         "strict_no_adjacent_feasible": is_no_adjacent_feasible(missions),
         "min_fillers_requested": args.min_fillers,

@@ -12,6 +12,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore playlist state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/daily_mission_state.json
+          key: daily-mission-state-${{ github.run_id }}
+          restore-keys: |
+            daily-mission-state-
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -32,3 +40,10 @@ jobs:
           PLAYLIST_TIMEZONE: Asia/Kolkata
           BCD_BEARER_TOKEN: ${{ secrets.BCD_BEARER_TOKEN }}
         run: python -m src.app --diagnostics
+
+      - name: Save playlist state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/daily_mission_state.json
+          key: daily-mission-state-${{ github.run_id }}

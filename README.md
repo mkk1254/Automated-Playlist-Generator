@@ -6,7 +6,8 @@ Automates your daily mission pipeline:
 2. Generates a natural playlist order with mission counts
 3. Resolves tracks on Spotify (title + optional artist allowlist)
 4. Creates or updates a public playlist named `Daily Mission YYYY-MM-DD`
-5. Reuses yesterday's playlist when today's mission payload is unchanged
+5. Reuses the last saved playlist when today's mission payload is unchanged
+6. Stores playlist reuse state privately in `.cache/daily_mission_state.json`
 
 ## Setup
 
@@ -50,6 +51,7 @@ Optional flags:
 - `stdout`: JSON array of ordered mission titles
 - `stderr`: summary report (or full diagnostics with `--diagnostics`)
 - Unmatched songs are skipped for Spotify upload and listed in report
+- Playlist descriptions stay neutral and do not expose the internal mission signature
 
 ## Tests
 
@@ -61,6 +63,7 @@ pytest -q
 
 Workflow is at `.github/workflows/daily_playlist.yml`.
 Scheduled at `00:30 UTC` (`6:00 AM IST`).
+The workflow restores and saves `.cache/daily_mission_state.json` so unchanged missions can reuse the last playlist across runs.
 Set repository secrets:
 - `SPOTIFY_CLIENT_ID`
 - `SPOTIFY_CLIENT_SECRET`

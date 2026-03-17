@@ -172,12 +172,30 @@ class SpotifyClient:
                     if isinstance(owner, dict) and owner.get("id") == user_id:
                         return {
                             "id": item["id"],
+                            "name": item.get("name") if isinstance(item.get("name"), str) else "",
                             "description": item.get("description") if isinstance(item.get("description"), str) else "",
                         }
 
             if not payload.get("next"):
                 return None
             offset += 50
+
+    def get_playlist(self, playlist_id: str) -> dict[str, str]:
+        response = self._api_request(
+            "GET",
+            f"/v1/playlists/{playlist_id}",
+            params={"fields": "id,name,description"},
+        )
+        payload = response.json()
+        resolved_id = payload.get("id")
+        if not isinstance(resolved_id, str) or not resolved_id:
+            raise SpotifyClientError("Spotify playlist response missing id")
+
+        return {
+            "id": resolved_id,
+            "name": payload.get("name") if isinstance(payload.get("name"), str) else "",
+            "description": payload.get("description") if isinstance(payload.get("description"), str) else "",
+        }
 
     def create_playlist(self, user_id: str, name: str, description: str, public: bool = False) -> str:
         response = self._api_request(
